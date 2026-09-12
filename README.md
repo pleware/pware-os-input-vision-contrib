@@ -31,10 +31,12 @@ never on Google's PyPI wheel.
 
 The build toolchain (bazel 7.4.1, python 3.12) is provisioned by `ignite` from
 the pware-os workspace's `mise.toml` — the single source of truth for the pin.
-After `ignite bootstrap` in `pware-os-workspace`:
+Platform system deps mise cannot pin live in the per-OS files auto-loaded by
+`auto_env` (`mise.windows.toml` → MSVC via winget, `mise.linux.toml` → OpenCV
+codecs via apt). After `ignite bootstrap` in `pware-os-workspace`:
 
 ```sh
-./build.sh
+./build.sh   # runs `mise run setup-system` first, then builds the wheel
 ```
 
 Or by hand:
@@ -48,7 +50,6 @@ python setup.py bdist_wheel
 
 ## Status
 
-Skeleton, pin, and the ignite-provisioned toolchain are in place. The Bazel
-build itself is being validated — Linux first, then Windows (MSVC toolchain,
-which mise cannot install: a one-time `winget install
-Microsoft.VisualStudio.2022.BuildTools` per Windows machine).
+Skeleton, pin, and the ignite-provisioned toolchain are in place, with
+per-OS system deps handled by the `setup-system` task. The Bazel build itself
+is being validated — Linux first, then Windows.
