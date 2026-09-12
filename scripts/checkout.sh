@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Clones the pinned mediapipe source commit into ./mediapipe-src, tags the
-# build with the pinned version, and drops the LLM (genai) deps we do not ship.
+# build with the pinned version, and applies two source patches:
 #
-# A raw checkout reports __version__ = 'dev', which modern setuptools rejects.
-# The tasks C binary links genai/bundler + genai/converter unconditionally, but
-# their `@odml` dependency is not defined in this release's WORKSPACE and we do
-# not ship on-device LLM inference — so those two deps are removed.
+# 1. Drops the LLM (genai) deps we do not ship. The tasks C binary links
+#    genai/bundler + genai/converter unconditionally, but their `@odml`
+#    dependency is not defined in this release's WORKSPACE and we ship
+#    face/vision, not on-device LLM inference.
+# 2. Turns off the OpenCV codecs whose system libraries are gone or renamed on
+#    modern distros (OpenEXR 2.x names, FFmpeg avresample, GStreamer). We ship
+#    a NumPy-driven API, not OpenCV file/video I/O, so they are not needed.
 set -euo pipefail
 
 commit=$(awk '/^commit/{print $3}' mediapipe.pin)
@@ -18,8 +21,20 @@ git clone --filter=blob:none --no-checkout \
   https://github.com/google-ai-edge/mediapipe mediapipe-src
 git -C mediapipe-src checkout "$commit"
 sed -i "s/__version__ = 'dev'/__version__ = '$version'/" mediapipe-src/setup.py
+
+# 1. Drop the LLM deps (their @odml repo is undefined in this release).
 sed -i \
   -e '/genai\/bundler:llm_bundler_utils_c_lib/d' \
   -e '/genai\/converter:llm_converter_c_lib/d' \
   mediapipe-src/mediapipe/tasks/c/BUILD
-echo "mediapipe source at $commit (version $version, genai dropped)"
+
+# 2. Disable OpenCV codecs that are gone/renamed on modern distros.
+sed -i 's/"WITH_WEBP": "OFF",/"WITH_WEBP": "OFF",\n        "WITH_OPENEXR": "OFF",\n        "WITH_FFMPEG": "OFF",\n        "WITH_GSTREAMER": "OFF",/' \
+  mediapipe-src/third_party/BUILD
+
+# 3. A CRLF checkout on Windows breaks `--noenable_bzlmod` in .bazelrc (Bazel
+# reads the trailing \r and leaves bzlmod on, which then cannot see WORKSPACE
+# repos). Normalize the files Bazel parses.
+sed -i 's/\r$//' mediapipe-src/.bazelrc mediapipe-src/.bazelversion
+
+echo "mediapipe source at $commit (version $version, genai + codecs dropped)"
