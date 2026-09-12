@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 # Clones the pinned mediapipe source commit into ./mediapipe-src, tags the
-# build with the pinned version, and applies two source patches:
+# build with the pinned version, and applies the source patches below.
 #
-# 1. Drops the LLM (genai) deps we do not ship. The tasks C binary links
-#    genai/bundler + genai/converter unconditionally, but their `@odml`
-#    dependency is not defined in this release's WORKSPACE and we ship
-#    face/vision, not on-device LLM inference.
-# 2. Turns off the OpenCV codecs whose system libraries are gone or renamed on
-#    modern distros (OpenEXR 2.x names, FFmpeg avresample, GStreamer). We ship
-#    a NumPy-driven API, not OpenCV file/video I/O, so they are not needed.
+# Patches (all for face/vision only — we do not ship LLM inference, OpenCV
+# file/video I/O, or on-device codecs):
+# 1. Drop the LLM (genai) deps whose `@odml` repo is undefined in this release.
+# 2. Turn off OpenCV codecs whose system libraries are gone/renamed on modern
+#    distros (OpenEXR 2.x, FFmpeg avresample, GStreamer).
+# 3. Drop the same libs from the static `linkopts` list — that hardcoded list is
+#    what actually breaks the link on a modern system, independent of #2.
+# 4. Normalize CRLF (a CRLF checkout on Windows breaks --noenable_bzlmod).
 set -euo pipefail
 
 commit=$(awk '/^commit/{print $3}' mediapipe.pin)
@@ -32,9 +33,16 @@ sed -i \
 sed -i 's/"WITH_WEBP": "OFF",/"WITH_WEBP": "OFF",\n        "WITH_OPENEXR": "OFF",\n        "WITH_FFMPEG": "OFF",\n        "WITH_GSTREAMER": "OFF",/' \
   mediapipe-src/third_party/BUILD
 
-# 3. A CRLF checkout on Windows breaks `--noenable_bzlmod` in .bazelrc (Bazel
-# reads the trailing \r and leaves bzlmod on, which then cannot see WORKSPACE
-# repos). Normalize the files Bazel parses.
+# 3. Drop the same libs from the static linkopts list (the hardcoded list is
+#    what actually fails to link on a modern system).
+sed -i \
+  -e '/"-lImath",/d' -e '/"-lIlmImf",/d' -e '/"-lIex",/d' \
+  -e '/"-lHalf",/d' -e '/"-lIlmThread",/d' -e '/"-ldc1394",/d' \
+  -e '/"-lavcodec",/d' -e '/"-lavformat",/d' -e '/"-lavutil",/d' \
+  -e '/"-lswscale",/d' -e '/"-lavresample",/d' \
+  mediapipe-src/third_party/BUILD
+
+# 4. A CRLF checkout on Windows breaks `--noenable_bzlmod` in .bazelrc.
 sed -i 's/\r$//' mediapipe-src/.bazelrc mediapipe-src/.bazelversion
 
-echo "mediapipe source at $commit (version $version, genai + codecs dropped)"
+echo "mediapipe source at $commit (version $version, patched)"
