@@ -45,4 +45,9 @@ sed -i \
 # 4. A CRLF checkout on Windows breaks `--noenable_bzlmod` in .bazelrc.
 sed -i 's/\r$//' mediapipe-src/.bazelrc mediapipe-src/.bazelversion
 
+# 5. The zlib http_archive points at zlib.net over HTTP, which flakes in CI.
+#    Add a GitHub mirror (same file, same sha256) as a fallback URL.
+sed -i 's|url = "http://zlib.net/fossils/zlib-1.2.13.tar.gz",|urls = ["http://zlib.net/fossils/zlib-1.2.13.tar.gz", "https://github.com/madler/zlib/releases/download/v1.2.13/zlib-1.2.13.tar.gz"],|' \
+  mediapipe-src/WORKSPACE
+
 echo "mediapipe source at $commit (version $version, patched)"
