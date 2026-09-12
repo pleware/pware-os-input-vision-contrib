@@ -1,0 +1,8 @@
+# MediaPipe source we build from. The Apache-2.0 source is telemetry-free;
+# Google injects the clearcut phone-home only into their own pip wheels
+# (see google-ai-edge/mediapipe#6291). Building from this commit gives us the
+# latest functionality without the tracking.
+source  = https://github.com/google-ai-edge/mediapipe
+tag     = v0.10.35
+commit  = f8ef212d5c962c0e853db7e59d217056b187084b
+version = 0.10.35

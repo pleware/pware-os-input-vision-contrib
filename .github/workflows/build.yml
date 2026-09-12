@@ -1,0 +1,39 @@
+name: build
+
+# First draft — the Bazel invocation is being validated (Linux first).
+on:
+  workflow_dispatch:
+
+jobs:
+  wheel:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+          - os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bazel
+        uses: bazel-contrib/setup-bazel@0.9.1
+        with:
+          bazelisk-cache: true
+
+      - name: Checkout pinned mediapipe source
+        run: bash scripts/checkout.sh
+        shell: bash
+
+      - name: Build wheel
+        run: python setup.py bdist_wheel
+        working-directory: mediapipe-src
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mediapipe-${{ matrix.os }}
+          path: mediapipe-src/dist/*.whl
