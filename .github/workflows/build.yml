@@ -1,6 +1,6 @@
 name: build
 
-# First draft — the Bazel invocation is being validated (Linux first).
+# Builds telemetry-free mediapipe wheels from the pinned Apache-2.0 source.
 on:
   workflow_dispatch:
 
@@ -20,10 +20,17 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Python build deps
+        run: python -m pip install --upgrade setuptools wheel
+
       - name: Install Bazel
         uses: bazel-contrib/setup-bazel@0.9.1
         with:
           bazelisk-cache: true
+
+      - name: Cap Bazel parallelism (CI is 4-core)
+        run: echo "build --jobs=4" > ~/.bazelrc
+        shell: bash
 
       - name: Checkout pinned mediapipe source
         run: bash scripts/checkout.sh
