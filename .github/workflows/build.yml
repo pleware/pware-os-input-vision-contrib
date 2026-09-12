@@ -23,6 +23,9 @@ jobs:
       - name: Install Python build deps
         run: python -m pip install --upgrade setuptools wheel
 
+      # bazelisk reads the pinned version from mediapipe's .bazelversion
+      # (7.4.1), which matches pware-os-workspace/mise.toml — one pin, two
+      # consumers. Local devs get it via `ignite bootstrap`; CI via bazelisk.
       - name: Install Bazel
         uses: bazel-contrib/setup-bazel@0.9.1
         with:

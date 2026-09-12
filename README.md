@@ -29,14 +29,26 @@ never on Google's PyPI wheel.
 
 ## Build locally
 
+The build toolchain (bazel 7.4.1, python 3.12) is provisioned by `ignite` from
+the pware-os workspace's `mise.toml` — the single source of truth for the pin.
+After `ignite bootstrap` in `pware-os-workspace`:
+
+```sh
+./build.sh
+```
+
+Or by hand:
+
 ```sh
 ./scripts/checkout.sh
 cd mediapipe-src
-# requires Bazel; see .github/workflows/build.yml for the exact steps
+python -m pip install --upgrade setuptools wheel
 python setup.py bdist_wheel
 ```
 
 ## Status
 
-Skeleton and pin are in place. The Bazel build itself is being validated —
-Linux first, then Windows (MSVC toolchain).
+Skeleton, pin, and the ignite-provisioned toolchain are in place. The Bazel
+build itself is being validated — Linux first, then Windows (MSVC toolchain,
+which mise cannot install: a one-time `winget install
+Microsoft.VisualStudio.2022.BuildTools` per Windows machine).
