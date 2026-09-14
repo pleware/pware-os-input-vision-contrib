@@ -2,9 +2,15 @@ mediapipe-src/
 dist/
 *.whl
 
+# Local merged graph — rebuilt on demand, never committed.
+graphify-out/
+
 # agentize-generated rules: per-instance, never commit.
 .cursor/rules/agentize.auto.generated*
 
 # agentize-generated skills: per-instance, mount re-emits them.
 .cursor/skills/agentize.auto.generated*
 .opencode/skills/agentize.auto.generated*
+
+# agentize-generated MCP config: per-instance, mount re-emits it.
+.cursor/mcp.json
