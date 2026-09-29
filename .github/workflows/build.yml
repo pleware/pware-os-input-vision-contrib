@@ -35,6 +35,11 @@ jobs:
           - os: ubuntu-latest
             run: python setup.py bdist_wheel
     runs-on: ${{ matrix.os }}
+    # The lever that actually holds: bazelisk checks `USE_BAZEL_VERSION` before
+    # `.bazelversion`, and neither the action's inputs nor a repo-root pin file
+    # was enough on their own (see the note above the Install Bazel step).
+    env:
+      USE_BAZEL_VERSION: "7.4.1"
     steps:
       - uses: actions/checkout@v4
 
@@ -56,21 +61,20 @@ jobs:
             libjpeg-dev libpng-dev libtiff-dev libopenexr-dev libdc1394-dev \
             libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
 
-      # The version is pinned twice on purpose: `bazel-version` is what the
-      # action installs, and `.bazelversion` (repo root, and next to the source)
-      # is what bazelisk reads. Leaving it unset is what killed six runs —
-      # bazelisk resolved *latest* (9.2.0), and from bazel 8 on WORKSPACE is
-      # disabled by default, so `@flatbuffers` — defined only in mediapipe's
-      # WORKSPACE (`third_party/flatbuffers:workspace.bzl`) — was invisible:
-      # `No repository visible as '@flatbuffers'`. The 0.10.35-era
+      # The version travels in `USE_BAZEL_VERSION`, which bazelisk reads before
+      # anything else. Two traps are recorded here because both cost a run:
+      # this action has no `bazel-version` input (it has `bazelisk-version`, a
+      # different thing), and a repo-root `.bazelversion` alone did not pin it
+      # either — the run went to `Downloading .../9.2.0/...`, and from bazel 8
+      # on WORKSPACE is off by default, so mediapipe's `@flatbuffers` — defined
+      # only in its WORKSPACE (`third_party/flatbuffers:workspace.bzl`) — was
+      # invisible: `No repository visible as '@flatbuffers'`. The 0.10.35-era
       # `--noenable_bzlmod` workaround was treating that symptom and could never
-      # have fixed it: under bazel 9 the flag that matters is `--enable_workspace`.
-      # 7.4.1 is mediapipe's own `.bazelversion`, and pware-os-workspace/mise.toml
-      # pins the same version — one version, two consumers.
+      # have fixed it. 7.4.1 is mediapipe's own `.bazelversion` and the version
+      # pware-os-workspace/mise.toml pins — one version, two consumers.
       - name: Install Bazel
         uses: bazel-contrib/setup-bazel@0.9.1
         with:
-          bazel-version: "7.4.1"
           bazelisk-cache: true
 
       # Assert it before building anything. A wrong bazel fails the run in

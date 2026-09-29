@@ -1,2 +1,10 @@
 # Line endings: normalize to LF in the repository, native on checkout.
 * text=auto
+
+# Except the pins. These are read by tools that compare them as strings —
+# bazelisk parses `.bazelversion` to decide which Bazel to download, a mediapipe
+# `.bazelrc` line is read by bazel before any of our code runs, and a stray CR
+# turns "7.4.1" into "latest" (which is exactly how six CI runs died: bazel 9
+# has WORKSPACE off, and mediapipe's @flatbuffers lives in the WORKSPACE).
+.bazelversion text eol=lf
+*.bazelrc      text eol=lf
