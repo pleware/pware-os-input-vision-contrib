@@ -25,11 +25,14 @@ jobs:
   wheel:
     strategy:
       fail-fast: false
-      # `only` picks the legs. It cannot be a job-level `if:` — that condition is
-      # evaluated before matrix expansion, so `matrix` is not a known name there
-      # (GitHub rejects the run with "Unrecognized named-value: 'matrix'").
+      # `only` picks the legs, and it has to be done with `exclude`: an `include`
+      # object whose keys match a *list* key's values merges into that
+      # combination, but one that does not match is added as a combination of its
+      # own — which is to say `only=windows` still ran both legs. (A job-level
+      # `if:` cannot do this either: it is evaluated before matrix expansion, so
+      # `matrix` is not a known name there.)
       matrix:
-        leg: ${{ (github.event.inputs.only == 'windows' && fromJSON('["windows"]')) || (github.event.inputs.only == 'linux' && fromJSON('["linux"]')) || fromJSON('["windows","linux"]') }}
+        os: [windows-latest, ubuntu-latest]
         include:
           # Windows: setup.py drives bazel (`--define=OPENCV=source`), and the
           # runner already carries MSVC. mediapipe 1.0.0 disables the GPU path
@@ -45,6 +48,7 @@ jobs:
           - os: ubuntu-latest
             leg: linux
             run: python setup.py bdist_wheel
+        exclude: ${{ github.event.inputs.only == 'windows' && fromJSON('[{"os":"ubuntu-latest"}]') || (github.event.inputs.only == 'linux' && fromJSON('[{"os":"windows-latest"}]')) || fromJSON('[]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
