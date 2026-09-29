@@ -56,13 +56,37 @@ jobs:
             libjpeg-dev libpng-dev libtiff-dev libopenexr-dev libdc1394-dev \
             libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
 
-      # bazelisk reads the pinned version from mediapipe's .bazelversion (7.4.1),
-      # which is the version pware-os-workspace/mise.toml pins too — one version,
-      # two consumers. Local builds get it from `ignite bootstrap`.
+      # The version is pinned twice on purpose: `bazel-version` is what the
+      # action installs, and `.bazelversion` (repo root, and next to the source)
+      # is what bazelisk reads. Leaving it unset is what killed six runs —
+      # bazelisk resolved *latest* (9.2.0), and from bazel 8 on WORKSPACE is
+      # disabled by default, so `@flatbuffers` — defined only in mediapipe's
+      # WORKSPACE (`third_party/flatbuffers:workspace.bzl`) — was invisible:
+      # `No repository visible as '@flatbuffers'`. The 0.10.35-era
+      # `--noenable_bzlmod` workaround was treating that symptom and could never
+      # have fixed it: under bazel 9 the flag that matters is `--enable_workspace`.
+      # 7.4.1 is mediapipe's own `.bazelversion`, and pware-os-workspace/mise.toml
+      # pins the same version — one version, two consumers.
       - name: Install Bazel
         uses: bazel-contrib/setup-bazel@0.9.1
         with:
+          bazel-version: "7.4.1"
           bazelisk-cache: true
+
+      # Assert it before building anything. A wrong bazel fails the run in
+      # seconds here; without this it fails 40 minutes into the build, with an
+      # error that reads like a problem with the source.
+      - name: Assert the pinned Bazel
+        run: |
+          v=$(bazel --version | awk '{print $2}')
+          if [ "$v" != "7.4.1" ]; then
+            echo "bazel $v, want 7.4.1 (mediapipe's .bazelversion): from bazel 8" >&2
+            echo "on, WORKSPACE is off by default and mediapipe's @flatbuffers" >&2
+            echo "lives there — the build cannot resolve it." >&2
+            exit 1
+          fi
+          echo "bazel $v"
+        shell: bash
 
       # mediapipe's .bazelrc asks bazel for `--jobs 1` (and turns bzlmod on,
       # which v1.0.0 relies on — no `--noenable_bzlmod` here: that flag was the
