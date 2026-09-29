@@ -25,7 +25,11 @@ jobs:
   wheel:
     strategy:
       fail-fast: false
+      # `only` picks the legs. It cannot be a job-level `if:` — that condition is
+      # evaluated before matrix expansion, so `matrix` is not a known name there
+      # (GitHub rejects the run with "Unrecognized named-value: 'matrix'").
       matrix:
+        leg: ${{ (github.event.inputs.only == 'windows' && fromJSON('["windows"]')) || (github.event.inputs.only == 'linux' && fromJSON('["linux"]')) || fromJSON('["windows","linux"]') }}
         include:
           # Windows: setup.py drives bazel (`--define=OPENCV=source`), and the
           # runner already carries MSVC. mediapipe 1.0.0 disables the GPU path
@@ -41,7 +45,6 @@ jobs:
           - os: ubuntu-latest
             leg: linux
             run: python setup.py bdist_wheel
-    if: github.event.inputs.only == '' || github.event.inputs.only == 'all' || github.event.inputs.only == matrix.leg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
