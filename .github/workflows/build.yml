@@ -13,6 +13,11 @@ on:
         description: "Attach the wheels to a GitHub release"
         type: boolean
         default: false
+      only:
+        description: "Build one leg instead of both"
+        type: choice
+        options: [all, windows, linux]
+        default: all
   push:
     tags: ["v*"]
 
@@ -26,6 +31,7 @@ jobs:
           # runner already carries MSVC. mediapipe 1.0.0 disables the GPU path
           # itself unless MEDIAPIPE_DISABLE_GPU=0, which is what a box wants.
           - os: windows-latest
+            leg: windows
             run: python setup.py bdist_wheel
           # Linux: the same entry point, with the system codec headers the
           # foreign_cc OpenCV build probes for. Upstream's own manylinux path
@@ -33,13 +39,10 @@ jobs:
           # the next step for a distributable manylinux-tagged wheel; the box
           # runs Debian x86_64, where this wheel installs as built.
           - os: ubuntu-latest
+            leg: linux
             run: python setup.py bdist_wheel
+    if: github.event.inputs.only == '' || github.event.inputs.only == 'all' || github.event.inputs.only == matrix.leg
     runs-on: ${{ matrix.os }}
-    # The lever that actually holds: bazelisk checks `USE_BAZEL_VERSION` before
-    # `.bazelversion`, and neither the action's inputs nor a repo-root pin file
-    # was enough on their own (see the note above the Install Bazel step).
-    env:
-      USE_BAZEL_VERSION: "7.4.1"
     steps:
       - uses: actions/checkout@v4
 
@@ -61,36 +64,50 @@ jobs:
             libjpeg-dev libpng-dev libtiff-dev libopenexr-dev libdc1394-dev \
             libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
 
-      # The version travels in `USE_BAZEL_VERSION`, which bazelisk reads before
-      # anything else. Two traps are recorded here because both cost a run:
-      # this action has no `bazel-version` input (it has `bazelisk-version`, a
-      # different thing), and a repo-root `.bazelversion` alone did not pin it
-      # either — the run went to `Downloading .../9.2.0/...`, and from bazel 8
-      # on WORKSPACE is off by default, so mediapipe's `@flatbuffers` — defined
-      # only in its WORKSPACE (`third_party/flatbuffers:workspace.bzl`) — was
-      # invisible: `No repository visible as '@flatbuffers'`. The 0.10.35-era
-      # `--noenable_bzlmod` workaround was treating that symptom and could never
-      # have fixed it. 7.4.1 is mediapipe's own `.bazelversion` and the version
+      # The pinned binary, downloaded and put first on PATH — upstream's own
+      # method (their `Dockerfile.manylinux_2_28_x86_64` curls
+      # `bazel-7.4.1-linux-x86_64` into /usr/local/bin).
+      #
+      # Not bazelisk, and not an action that installs it: on the Windows runner a
+      # bare `bazel` from setup.py resolved to the *image's own* bazel — 9.2.0 —
+      # whatever `USE_BAZEL_VERSION` or `.bazelversion` said. From bazel 8 on
+      # WORKSPACE is off by default, and mediapipe's `@flatbuffers` is defined
+      # only in its WORKSPACE (`third_party/flatbuffers:workspace.bzl`), so the
+      # build died on `No repository visible as '@flatbuffers'` — the same error
+      # that killed all five runs of 2026-09-12. The 0.10.35-era
+      # `--noenable_bzlmod` workaround treated that symptom and could never have
+      # fixed it. 7.4.1 is mediapipe's own `.bazelversion` and the version
       # pware-os-workspace/mise.toml pins — one version, two consumers.
-      - name: Install Bazel
-        uses: bazel-contrib/setup-bazel@0.9.1
-        with:
-          bazelisk-cache: true
-
-      # Assert it before building anything. A wrong bazel fails the run in
-      # seconds here; without this it fails 40 minutes into the build, with an
-      # error that reads like a problem with the source.
-      - name: Assert the pinned Bazel
+      - name: Install the pinned Bazel (7.4.1, by hand)
+        shell: bash
         run: |
+          case "$RUNNER_OS" in
+            Windows) asset=bazel-7.4.1-windows-x86_64.exe; bin=bazel.exe ;;
+            Linux)   asset=bazel-7.4.1-linux-x86_64;      bin=bazel ;;
+            *) echo "unsupported runner: $RUNNER_OS" >&2; exit 1 ;;
+          esac
+          dir="$RUNNER_TEMP/pinned-bazel"
+          mkdir -p "$dir"
+          curl -fL --retry 5 --retry-delay 5 --retry-connrefused \
+            -o "$dir/$bin" \
+            "https://github.com/bazelbuild/bazel/releases/download/7.4.1/$asset"
+          chmod +x "$dir/$bin" || true
+          echo "$dir" >> "$GITHUB_PATH"
+
+      # Assert what a bare `bazel` resolves to, and where it lives — the failure
+      # this guards against was invisible from the version string alone (the
+      # first fix pinned the version and the build still used the image's bazel).
+      - name: Assert the pinned Bazel
+        shell: bash
+        run: |
+          which -a bazel || true
           v=$(bazel --version | awk '{print $2}')
           if [ "$v" != "7.4.1" ]; then
-            echo "bazel $v, want 7.4.1 (mediapipe's .bazelversion): from bazel 8" >&2
-            echo "on, WORKSPACE is off by default and mediapipe's @flatbuffers" >&2
-            echo "lives there — the build cannot resolve it." >&2
+            echo "bazel $v, want 7.4.1: from bazel 8 on, WORKSPACE is off by" >&2
+            echo "default and mediapipe's @flatbuffers lives only there." >&2
             exit 1
           fi
           echo "bazel $v"
-        shell: bash
 
       # mediapipe's .bazelrc asks bazel for `--jobs 1` (and turns bzlmod on,
       # which v1.0.0 relies on — no `--noenable_bzlmod` here: that flag was the
