@@ -15,4 +15,10 @@ mise run setup-system
 cd mediapipe-src
 python -m pip install --upgrade setuptools wheel
 python setup.py bdist_wheel
-echo "wheel: $(ls dist/*.whl)"
+cd ..
+
+# The gate, locally: the wheel must carry none of the markers Google's own
+# wheels carry (`scripts/scan-wheel.py`).
+python scripts/scan-wheel.py --dir mediapipe-src/dist > telemetry-scan.json
+echo "wheel: $(ls mediapipe-src/dist/*.whl)"
+echo "scan:  telemetry-scan.json"

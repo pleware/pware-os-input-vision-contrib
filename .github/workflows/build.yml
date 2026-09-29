@@ -1,8 +1,20 @@
 name: build
 
-# Builds telemetry-free mediapipe wheels from the pinned Apache-2.0 source.
+# Builds telemetry-free mediapipe wheels from the pinned Apache-2.0 source, and
+# refuses to publish one that carries Google's clearcut uploader.
+#
+# Two jobs, one artifact each: the wheel, and the scan manifest that says what
+# was inside it. The scan is a gate, not a report — a dirty wheel fails the run
+# before anything is uploaded (`scripts/scan-wheel.py`).
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Attach the wheels to a GitHub release"
+        type: boolean
+        default: false
+  push:
+    tags: ["v*"]
 
 jobs:
   wheel:
@@ -10,8 +22,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Windows: setup.py drives bazel (`--define=OPENCV=source`), and the
+          # runner already carries MSVC. mediapipe 1.0.0 disables the GPU path
+          # itself unless MEDIAPIPE_DISABLE_GPU=0, which is what a box wants.
           - os: windows-latest
+            run: python setup.py bdist_wheel
+          # Linux: the same entry point, with the system codec headers the
+          # foreign_cc OpenCV build probes for. Upstream's own manylinux path
+          # (`build_manylinux_wheel.sh` + `Dockerfile.manylinux_2_28_x86_64`) is
+          # the next step for a distributable manylinux-tagged wheel; the box
+          # runs Debian x86_64, where this wheel installs as built.
+          - os: ubuntu-latest
+            run: python setup.py bdist_wheel
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -34,34 +56,70 @@ jobs:
             libjpeg-dev libpng-dev libtiff-dev libopenexr-dev libdc1394-dev \
             libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
 
-      # bazelisk reads the pinned version from mediapipe's .bazelversion
-      # (7.4.1), which matches pware-os-workspace/mise.toml — one pin, two
-      # consumers. Local devs get it via `ignite bootstrap`; CI via bazelisk.
+      # bazelisk reads the pinned version from mediapipe's .bazelversion (7.4.1),
+      # which is the version pware-os-workspace/mise.toml pins too — one version,
+      # two consumers. Local builds get it from `ignite bootstrap`.
       - name: Install Bazel
         uses: bazel-contrib/setup-bazel@0.9.1
         with:
           bazelisk-cache: true
 
-      # Two Bazel flags in our own LF-ending rc:
-      # - --noenable_bzlmod: mediapipe v0.10.35 is WORKSPACE-only; its own
-      #   .bazelrc sets this, but a CRLF checkout on Windows breaks that line
-      #   and leaves bzlmod on, which then cannot see WORKSPACE repos
-      #   ("No repository visible as '@flatbuffers'"). Setting it again here,
-      #   in a file we write with LF endings, is the robust fix.
-      # - --jobs=4: the runner is 4-core; mediapipe's .bazelrc asks for 128.
-      - name: Set Bazel flags (disable bzlmod, cap jobs)
-        run: printf 'common --noenable_bzlmod\nbuild --jobs=4\n' > ~/.bazelrc
+      # mediapipe's .bazelrc asks bazel for `--jobs 1` (and turns bzlmod on,
+      # which v1.0.0 relies on — no `--noenable_bzlmod` here: that flag was the
+      # 0.10.35-era workaround and the cause of five dead runs). Cap the jobs at
+      # the runner's core count instead of upstream's serial default.
+      - name: Cap Bazel jobs at the runner's cores
+        run: printf 'build --jobs=%s\n' "$(nproc 2>/dev/null || echo 4)" > ~/.bazelrc
         shell: bash
 
       - name: Checkout pinned mediapipe source
         run: bash scripts/checkout.sh
-        shell: bash
 
       - name: Build wheel
-        run: python setup.py bdist_wheel
+        run: ${{ matrix.run }}
         working-directory: mediapipe-src
+
+      # The point of the whole repository: the artifact must carry none of the
+      # markers Google's own wheels carry. Fails the run, so nothing dirty is
+      # ever uploaded.
+      - name: Scan the wheel for the uploader (gate)
+        run: python scripts/scan-wheel.py --dir mediapipe-src/dist > telemetry-scan.json
 
       - uses: actions/upload-artifact@v4
         with:
           name: mediapipe-${{ matrix.os }}
-          path: mediapipe-src/dist/*.whl
+          path: |
+            mediapipe-src/dist/*.whl
+            telemetry-scan.json
+
+  release:
+    needs: wheel
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: wheels
+          merge-multiple: true
+
+      # What the box installs has to be verifiable after the fact, so the
+      # checksums ship beside the wheels.
+      - name: Checksums
+        run: |
+          cd wheels
+          sha256sum *.whl > SHA256SUMS
+          cat SHA256SUMS
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            wheels/*.whl
+            wheels/SHA256SUMS
+            wheels/telemetry-scan.json
+          # A tag build names its own release; a manual one needs a name, so it
+          # attaches to the tag if there is one and otherwise to a draft named
+          # for the pinned version.
+          draft: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          name: mediapipe ${{ github.ref_name }}

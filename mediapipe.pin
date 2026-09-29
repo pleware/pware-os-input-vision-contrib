@@ -2,7 +2,18 @@
 # Google injects the clearcut phone-home only into their own pip wheels
 # (see google-ai-edge/mediapipe#6291). Building from this commit gives us the
 # latest functionality without the tracking.
+#
+# v1.0.0, not 1.0.1: PyPI serves a 1.0.1 wheel (2026-08-14) but upstream has
+# never tagged that source — the newest tag is v1.0.0 (2026-07-28), and a wheel
+# can only be built from a source release we can name. The version we publish is
+# therefore v1.0.0 until Google tags again.
+#
+# v1.0.0 is bzlmod-first: its own .bazelrc sets `common --enable_bzlmod` and it
+# ships MODULE.bazel *and* WORKSPACE. That is why the 0.10.35 recipe's
+# `--noenable_bzlmod` workaround is gone — the flag was the class of failure
+# behind all five dead runs of September 2026 (`No repository visible as
+# '@flatbuffers'`).
 source  = https://github.com/google-ai-edge/mediapipe
-tag     = v0.10.35
-commit  = f8ef212d5c962c0e853db7e59d217056b187084b
-version = 0.10.35
+tag     = v1.0.0
+commit  = 6d31f1ebc3284db74d211d62bdc4f0a0c29ea120
+version = 1.0.0
