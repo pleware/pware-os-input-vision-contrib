@@ -16,7 +16,7 @@
      ext_dest_dir = os.path.dirname(ext_dest_path)
      if not os.path.exists(ext_dest_dir):
        os.makedirs(ext_dest_dir)
-@@ -282,6 +289,22 @@
+@@ -282,6 +289,26 @@
      if IS_WINDOWS:
        for opencv_dll in glob.glob(
            os.path.join('bazel-bin', ext.relpath, '*opencv*.dll')):
@@ -24,18 +24,22 @@
 +      # The prebuilt OpenCV that @windows_opencv points at is linked as a DLL, so the
 +      # extension imports opencv_world3410.dll at load time and ctypes.CDLL reports the
 +      # failure as "or one of its dependencies". Nothing bazel builds puts it in
-+      # bazel-bin, so it is taken from the same OpenCV build the link used. Only the
-+      # release DLL -- the debug twin is called opencv_world3410d.dll.
++      # bazel-bin, so it is taken from the OpenCV build the link used --
++      # third_party/opencv_windows.BUILD names x64/vc15/{lib,bin}/opencv_world<ver> for
++      # the release configuration and the same name with a trailing "d" for the debug
++      # one, which is why the debug twin and the vc14 tree are both left out.
 +      opencv_build = os.environ.get('PWARE_OPENCV_BUILD', 'C:/opencv/build')
-+      opencv_runtime = glob.glob(
-+          os.path.join(opencv_build, 'x64', 'vc*', 'bin', 'opencv_world[0-9]*.dll'))
++      opencv_runtime = [
++          dll for dll in glob.glob(
++              os.path.join(opencv_build, 'x64', 'vc15', 'bin', 'opencv_world*.dll'))
++          if not os.path.basename(dll).endswith('d.dll')]
 +      if not opencv_runtime:
 +        raise RuntimeError(
-+            'no OpenCV runtime DLL under %s; the extension cannot be loaded without '
-+            'one, and a wheel that cannot be loaded must not be built'
++            'no release OpenCV runtime DLL under %s/x64/vc15/bin; the extension cannot '
++            'be loaded without one, and a wheel that cannot be loaded must not be built'
 +            % opencv_build)
 +      for opencv_dll in opencv_runtime:
-+        print('Bundling OpenCV runtime:', opencv_dll)
++        print('Bundling OpenCV runtime:', os.path.basename(opencv_dll))
          shutil.copy(opencv_dll, ext_dest_dir)
  
  
