@@ -11,7 +11,9 @@
 # Patches (all for face/vision only — we do not ship LLM inference, OpenCV
 # file/video I/O, or on-device codecs):
 # 1. Turn off OpenCV codecs whose system libraries are gone/renamed on modern
-#    distros (OpenEXR 2.x, FFmpeg avresample, GStreamer).
+#    distros (OpenEXR 2.x, FFmpeg avresample, GStreamer), and OpenCV's own
+#    command-line tools — the latter because linking them is a toolchain trap,
+#    not because we would mind their size.
 # 2. Drop the same libs from the static `linkopts` list — that hardcoded list is
 #    what actually breaks the link on a modern system, independent of #1.
 # 3. Normalize CRLF: mediapipe's own `.bazelrc` lines are read by bazel before
@@ -58,9 +60,23 @@ apply() {
   sed -i "$@" "$file"
 }
 
-# 1. Disable OpenCV codecs that are gone/renamed on modern distros.
+# 1. Disable OpenCV codecs that are gone/renamed on modern distros (OpenEXR 2.x,
+#    FFmpeg avresample, GStreamer) and OpenCV's own tools.
+#
+#    `BUILD_opencv_apps` is not about size: OpenCV builds the executables in its
+#    `apps/` directory (opencv_annotation and friends), and linking those is what
+#    fails on a modern toolchain, because the foreign_cc crosstool links C++ with
+#    `gcc` rather than `g++` and the link line then carries no libstdc++:
+#
+#      /usr/bin/ld: ../../lib/libopencv_imgcodecs.a(loadsave.cpp.o): undefined
+#        reference to symbol '_ZNSt15basic_streambufIcSt11char_traitsIcEE8overflowEi@@GLIBCXX_3.4'
+#      make[2]: *** [.../apps/annotation/CMakeFiles/opencv_annotation.dir/build.make:109:
+#        bin/opencv_annotation] Error 1
+#
+#    We want the static libraries and not one byte of the tools. Turning them off
+#    removes the failure instead of papering over the link line.
 apply mediapipe-src/third_party/BUILD '"WITH_WEBP": "OFF",' \
-  's/"WITH_WEBP": "OFF",/"WITH_WEBP": "OFF",\n        "WITH_OPENEXR": "OFF",\n        "WITH_FFMPEG": "OFF",\n        "WITH_GSTREAMER": "OFF",/'
+  's/"WITH_WEBP": "OFF",/"WITH_WEBP": "OFF",\n        "WITH_OPENEXR": "OFF",\n        "WITH_FFMPEG": "OFF",\n        "WITH_GSTREAMER": "OFF",\n        "BUILD_opencv_apps": "OFF",/'
 
 # 2. Drop the same libs from the static linkopts list (the hardcoded list is what
 #    actually fails to link on a modern system).
