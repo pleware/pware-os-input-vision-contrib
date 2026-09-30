@@ -40,11 +40,25 @@ version=$(pin_value version)
 # server has actually exited. Deleting the checkout is the first thing this script
 # does, so a failure here costs a whole build to discover (it surfaces as
 # `rm: cannot remove 'mediapipe-src': Device or resource busy`, one line into a log
-# nobody reads until the build is over). Hence: stop the server that owns the tree,
-# wait for the handle to go, and fail loudly if it never does. Skipped in CI, where
-# the directory does not exist yet.
+# nobody reads until the build is over). Three Windows facts, measured the hard way:
+#
+# 1. a live server holds handles into the tree;
+# 2. bazel's convenience symlinks in the workspace root (`bazel-bin`, `bazel-out`,
+#    …) are junctions, and MSYS `rm -rf` refuses a directory holding one —
+#    reporting "busy" for the whole tree, which is why the same tree deleted fine
+#    from PowerShell and never from this shell;
+# 3. a delete that fails silently leaves the previous checkout in place.
+#
+# So: stop the server, undo the junctions with the tool that owns them (plain
+# `rmdir` removes the link, never its target — the target is the bazel output base,
+# which the next build wants to keep), then delete with retries, and exit 1 naming
+# the cause if the directory survives.
 if [ -d mediapipe-src ]; then
   (cd mediapipe-src && bazel shutdown >/dev/null 2>&1) || true
+  for link in mediapipe-src/bazel-*; do
+    [ -e "$link" ] || [ -L "$link" ] || continue
+    cmd //c rmdir "$(cygpath -w "$link")" >/dev/null 2>&1 || true
+  done
   for _ in 1 2 3 4 5 6; do
     if rm -rf mediapipe-src 2>/dev/null; then break; fi
     sleep 5
