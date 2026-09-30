@@ -116,8 +116,13 @@ installing it in a fresh venv and running a real `FaceLandmarker` inference on
 
 The Windows half of that recipe is `./build.sh`, which needs MSVC — `mise run
 setup-system` installs it (`scripts/setup-msvc.ps1` in the umbrella, into
-`F:\Programy`) — and stubs the Apple-only `rules_swift` module, which aborts the
-analysis on Windows where on Linux it only warns.
+`F:\Programy`), plus Developer Mode, which is what lets llvm's bazel overlay
+script create the symlinks it needs (`scripts/setup-devmode.ps1`) — stubs the
+Apple-only `rules_swift` module, which aborts the analysis on Windows where on
+Linux it only warns, and puts the prebuilt OpenCV 3.4.10 where mediapipe looks for
+it (`scripts/setup-opencv-windows.ps1`, into `C:\opencv`): on Windows this build
+does not compile OpenCV at all — setup.py links the prebuilt libraries through
+`@windows_opencv//:opencv` rather than the `opencv_cmake` rule Linux uses.
 
 ## How the wheel reaches the box
 

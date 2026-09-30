@@ -133,4 +133,19 @@ sed -i 's/\r$//' mediapipe-src/.bazelrc mediapipe-src/.bazelversion
 apply mediapipe-src/WORKSPACE 'default_python_version = "system",' \
   's/default_python_version = "system",/default_python_version = "3.12",/'
 
+# 5. protobuf at this pin refuses to compile under MSVC unless the build says it
+#    accepts the risk, in as many words:
+#
+#      external/protobuf~/src/google/protobuf/stubs/port.h(38): fatal error C1189:
+#      #error: "Protobuf will be dropping support for MSVC + Bazel in 34.0. To
+#      continue using it until then, use the flag --define=protobuf_allow_msvc=true."
+#
+#    It goes in .bazelrc rather than in the build command because the command is
+#    built by setup.py, and every caller would have to remember it; and it is not
+#    conditioned on the platform because it is inert on one — the guard lives behind
+#    `#if defined(_MSC_VER)`, so Linux compiles the same source either way.
+if ! grep -q 'protobuf_allow_msvc' mediapipe-src/.bazelrc; then
+  printf 'build --define=protobuf_allow_msvc=true\n' >> mediapipe-src/.bazelrc
+fi
+
 echo "mediapipe source at $commit (version $version, patched)"

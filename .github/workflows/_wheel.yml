@@ -130,6 +130,10 @@ jobs:
           printf 'common --override_module=rules_swift=%s/swift-stub\n' "$(cygpath -m "$PWD")" >> .bazelrc
           tail -3 .bazelrc
 
+      - name: Install the prebuilt OpenCV mediapipe links against (Windows)
+        if: runner.os == 'Windows'
+        run: ./scripts/setup-opencv-windows.ps1
+
       - name: Build wheel
         run: ${{ inputs.run }}
         working-directory: mediapipe-src

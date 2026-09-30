@@ -6,7 +6,10 @@
 # mise are on PATH — see ../mise.toml.
 #
 # `mise run setup-system` installs the platform system deps mise cannot pin:
-# MSVC (winget) on Windows, OpenCV codecs (apt) on Linux. Idempotent.
+# MSVC (winget) and Developer Mode on Windows (for the symlinks llvm's bazel
+# overlay script makes), OpenCV codecs (apt) on Linux. Idempotent. On Windows this
+# script also installs the prebuilt OpenCV that mediapipe's Windows build links
+# against, which `mise` cannot know about (`scripts/setup-opencv-windows.ps1`).
 set -euo pipefail
 
 mise run setup-system
@@ -30,6 +33,15 @@ if [ "${OS:-}" = "Windows_NT" ]; then
   cp -r swift-stub mediapipe-src/swift-stub
   printf 'common --override_module=rules_swift=%s/swift-stub\n' \
     "$(cygpath -m "$PWD/mediapipe-src")" >> mediapipe-src/.bazelrc
+
+  # Windows does not compile OpenCV in this build: setup.py links the prebuilt one
+  # through `@windows_opencv//:opencv`, which WORKSPACE points at C:\opencv\build.
+  # Absent, the analysis dies with "no such package '@@windows_opencv//'" — a build
+  # that never starts, reported as a missing package. The script downloads the
+  # release upstream's instructions name and is idempotent, so this line costs
+  # nothing once C:\opencv is there. `.github/workflows/_wheel.yml` calls the same
+  # script; there is no second copy of that knowledge.
+  powershell -NoProfile -ExecutionPolicy Bypass -File scripts/setup-opencv-windows.ps1
 fi
 
 cd mediapipe-src
