@@ -127,6 +127,31 @@ jobs:
       - name: Checkout pinned mediapipe source
         run: bash scripts/checkout.sh
 
+      # MODULE.bazel declares rules_swift (beside rules_apple and apple_support)
+      # for the iOS/macOS builds, and its autoconfiguration hard-fails where no
+      # `swiftc` exists:
+      #
+      #   ERROR: ... external/rules_swift~/swift/internal/swift_autoconfiguration.bzl:355:13
+      #   ERROR: Analysis of target '//mediapipe/tasks/metadata:image_segmenter_metadata_schema_py'
+      #          failed; build aborted: No 'swiftc.exe' executable found in Path
+      #
+      # Only Windows dies of this. The ubuntu image happens to ship a Swift
+      # toolchain, which is why the same recipe produced a wheel there and died
+      # here — the box's python wheel path never loads a Swift rule at all. So
+      # the module is pointed at a stub: the graph resolves, no toolchain is
+      # fetched, and a real Apple build is not something this repository claims
+      # to produce. (`cygpath -m` because a native bazel cannot read an MSYS
+      # path.)
+      - name: Point the Apple-only Swift module at a stub (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        working-directory: mediapipe-src
+        run: |
+          mkdir -p swift-stub
+          printf 'module(name = "rules_swift", version = "2.3.0")\n' > swift-stub/MODULE.bazel
+          printf 'common --override_module=rules_swift=%s/swift-stub\n' "$(cygpath -m "$PWD")" >> .bazelrc
+          tail -3 .bazelrc
+
       - name: Build wheel
         run: ${{ matrix.run }}
         working-directory: mediapipe-src
