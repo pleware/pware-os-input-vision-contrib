@@ -34,7 +34,11 @@ artifact, and neither was taken from PyPI.
   10.0.26100 from VS 2022 Build Tools, bazel 7.4.1, python 3.12.10, JDK 21.0.2),
   plain `python setup.py bdist_wheel`. 25 586 237 bytes.
 - **Linux** — `scripts/build-local-wsl.sh` in WSL/Debian 13 (16 cores, bazel 7.4.1
-  by hand, python 3.12.14 from `uv`, JDK 21), the same entry point. 9 523 114 bytes.
+  by hand, python 3.12.14 from `uv`, JDK 21), the same entry point. 9 523 042 bytes.
+
+Both wheels come from the **same revision of the recipe** in this repository: the
+Linux one was rebuilt after the Windows-only patches landed, so neither predates a
+line the other was built with.
 
 The Linux wheel is `linux_x86_64`, not `manylinux`: it installs on the box's Debian
 and is not yet a wheel to hand to strangers (`auditwheel repair`, the step
