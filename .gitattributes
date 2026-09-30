@@ -11,7 +11,7 @@
 # there is nothing to disagree about.
 #
 # The two failures this file exists to prevent, both measured on this box: a shell
-# script checked out with CRLF makes `#!/usr/bin/env bash` read as `bash` and the
+# script checked out with CRLF makes `#!/usr/bin/env bash` read as `bash\r` and the
 # kernel answers "bad interpreter", and `gofmt -l` calls every `.go` file
 # unformatted because of the CR it did not write.
 * text=auto eol=lf
