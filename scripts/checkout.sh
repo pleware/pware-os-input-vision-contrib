@@ -194,4 +194,21 @@ apply mediapipe-src/mediapipe/framework/api3/graph.h \
   'namespace mediapipe::api3 {' \
   's|namespace mediapipe::api3 {|namespace mediapipe::api3 {\n\n// Declared here to disambiguate the friend declaration below: the plain\n// mediapipe::SubgraphContext in framework/subgraph.h and this template share a\n// name, and without this line MSVC resolves the friend to the plain class.\ntemplate <typename NodeT>\nclass SubgraphContext;|'
 
+# 9. MSVC will not accept a template parameter that follows a parameter pack and
+#    cannot be deduced, and the api3 free functions order theirs that way:
+#
+#      mediapipe/framework/api3/calculator_context.h(436): error C3547: cannot use
+#      template parameter "DoNotSpecify" because it follows a template parameter
+#      pack and cannot be deduced from the parameters of function
+#      "mediapipe::api3::internal::VisitPacketOrDie"
+#
+#    `int&... DoNotSpecify` is a guard whose entire job is to stop the next
+#    parameter (`F`) from being given explicitly. All four call sites in the tree
+#    pass types only -- `<U, Rest...>`, `<PayloadTs...>` -- so the guard has nothing
+#    to guard in this build. Removing it is the fix; relying on a compiler
+#    difference would be the workaround.
+apply mediapipe-src/mediapipe/framework/api3/calculator_context.h \
+  ', int&... DoNotSpecify,' \
+  's/, int&\.\.\. DoNotSpecify,/,/g'
+
 echo "mediapipe source at $commit (version $version, patched)"
