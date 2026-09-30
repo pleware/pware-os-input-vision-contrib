@@ -285,4 +285,18 @@ apply mediapipe-src/mediapipe/framework/legacy_calculator_support.cc \
 apply mediapipe-src/MODULE.bazel '    module_name = "protobuf",' \
   's|    module_name = "protobuf",|    module_name = "protobuf",\n    patches = [\n        "//third_party:protobuf_msvc_zlib.patch",\n        "//third_party:protobuf_msvc_json.patch",\n    ],\n    patch_strip = 1,|'
 
+# 13. The wheel's native library is named after the bazel label on every platform
+#     (`//mediapipe/tasks/c:libmediapipe.so`), but the Python bindings look for
+#     libmediapipe.dll on Windows, and the prebuilt OpenCV that @windows_opencv
+#     points at is linked as a DLL rather than copied into bazel-bin. Both are
+#     measured on a real install:
+#
+#       FileNotFoundError: Could not find module '...\mediapipe\tasks\c\
+#       libmediapipe.dll' (or one of its dependencies)
+#       dumpbin /dependents bazel-bin/mediapipe/tasks/c/libmediapipe.so
+#         -> opencv_world3410.dll, MSVCP140.dll, VCRUNTIME140.dll, dbghelp.dll, ...
+#
+#     Nothing but the system provides the rest, so the wheel carries the one it
+#     needs, and refuses to build when that DLL is not where the link found it.
+git -C mediapipe-src apply "$PWD/patches/mediapipe_windows_wheel_name.patch"
 echo "mediapipe source at $commit (version $version, patched)"

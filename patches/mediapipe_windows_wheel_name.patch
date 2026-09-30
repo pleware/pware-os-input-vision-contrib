@@ -1,0 +1,41 @@
+--- a/setup.py
++++ b/setup.py
+@@ -274,7 +274,14 @@
+         'bazel-bin', ext.relpath, ext.target_name
+     )
+ 
+-    ext_dest_path = os.path.join(self.build_lib, ext.relpath, ext.target_name)
++    # The label names the shared library libmediapipe.so on every platform, while the
++    # Python bindings look for libmediapipe.dll on Windows
++    # (mediapipe/tasks/python/core/mediapipe_c_bindings.py, load_raw_library). A wheel
++    # built from the label's name therefore installs a Linux-shaped file name on
++    # Windows and every import fails with
++    # "Could not find module ... libmediapipe.dll (or one of its dependencies)".
++    ext_dest_name = 'libmediapipe.dll' if IS_WINDOWS else ext.target_name
++    ext_dest_path = os.path.join(self.build_lib, ext.relpath, ext_dest_name)
+     ext_dest_dir = os.path.dirname(ext_dest_path)
+     if not os.path.exists(ext_dest_dir):
+       os.makedirs(ext_dest_dir)
+@@ -282,6 +289,22 @@
+     if IS_WINDOWS:
+       for opencv_dll in glob.glob(
+           os.path.join('bazel-bin', ext.relpath, '*opencv*.dll')):
++        shutil.copy(opencv_dll, ext_dest_dir)
++      # The prebuilt OpenCV that @windows_opencv points at is linked as a DLL, so the
++      # extension imports opencv_world3410.dll at load time and ctypes.CDLL reports the
++      # failure as "or one of its dependencies". Nothing bazel builds puts it in
++      # bazel-bin, so it is taken from the same OpenCV build the link used. Only the
++      # release DLL -- the debug twin is called opencv_world3410d.dll.
++      opencv_build = os.environ.get('PWARE_OPENCV_BUILD', 'C:/opencv/build')
++      opencv_runtime = glob.glob(
++          os.path.join(opencv_build, 'x64', 'vc*', 'bin', 'opencv_world[0-9]*.dll'))
++      if not opencv_runtime:
++        raise RuntimeError(
++            'no OpenCV runtime DLL under %s; the extension cannot be loaded without '
++            'one, and a wheel that cannot be loaded must not be built'
++            % opencv_build)
++      for opencv_dll in opencv_runtime:
++        print('Bundling OpenCV runtime:', opencv_dll)
+         shutil.copy(opencv_dll, ext_dest_dir)
+ 
+ 
