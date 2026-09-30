@@ -23,14 +23,17 @@ fi
 
 ./scripts/checkout.sh
 
-# The Windows leg needs the Swift module stubbed before bazel looks at it: on
-# Windows `rules_swift`'s autoconfiguration aborts the analysis of targets that
-# never touch Swift (`No 'swiftc.exe' executable found in Path`), while on Linux
-# the same check is only a warning. `_wheel.yml` carries the CI twin of this step;
-# `scripts/build-local-wsl.sh` deliberately does not, because it does not need it.
+# The Windows leg needs the Apple-only Swift module replaced before bazel loads
+# the graph: there, rules_swift's autoconfiguration aborts the analysis of targets
+# that never touch Swift (`No 'swiftc.exe' executable found in Path`), while on
+# Linux the same check is only a warning. The stub is one directory in this
+# repository — `swift-stub/`, whose README says why and how to extend it — and
+# `.github/workflows/_wheel.yml` copies that same directory. It used to be four
+# printf lines duplicated in both places, which a stub that has to grow cannot be.
+# `scripts/build-local-wsl.sh` deliberately does not do this: Linux does not need it.
 if [ "${OS:-}" = "Windows_NT" ]; then
-  mkdir -p mediapipe-src/swift-stub
-  printf 'module(name = "rules_swift", version = "2.3.0")\n' > mediapipe-src/swift-stub/MODULE.bazel
+  rm -rf mediapipe-src/swift-stub
+  cp -r swift-stub mediapipe-src/swift-stub
   printf 'common --override_module=rules_swift=%s/swift-stub\n' \
     "$(cygpath -m "$PWD/mediapipe-src")" >> mediapipe-src/.bazelrc
 fi
