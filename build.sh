@@ -11,6 +11,16 @@ set -euo pipefail
 
 mise run setup-system
 
+# A leftover bazel server holds the workspace tree on Windows, and then
+# `rm -rf mediapipe-src` (the first thing checkout.sh does) dies with
+# `Device or resource busy` before a single line compiles. The server that owns
+# the workspace is the one to stop, and `bazel shutdown` has to run from inside
+# it — which is why this lives here rather than in checkout.sh, which is about to
+# delete that directory. CI never meets this: every run gets a fresh runner.
+if [ -d mediapipe-src ]; then
+  (cd mediapipe-src && bazel shutdown >/dev/null 2>&1) || true
+fi
+
 ./scripts/checkout.sh
 
 # The Windows leg needs the Swift module stubbed before bazel looks at it: on
