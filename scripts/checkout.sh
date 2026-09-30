@@ -16,6 +16,8 @@
 #    what actually breaks the link on a modern system, independent of #1.
 # 3. Normalize CRLF: mediapipe's own `.bazelrc` lines are read by bazel before
 #    anything of ours runs, and a CRLF checkout on Windows breaks them.
+# 4. Pin the python the build resolves against (`default_python_version`), so the
+#    wheel does not depend on which python3 the host distro ships.
 #
 # Gone since 0.10.35, and deliberately not carried forward:
 # - dropping the LLM (genai) deps — v1.0.0's `mediapipe/tasks/c/BUILD` no longer
@@ -71,5 +73,16 @@ apply mediapipe-src/third_party/BUILD '"-lImath",' \
 # 3. A CRLF checkout breaks mediapipe's own .bazelrc on Windows (and with it
 #    bzlmod, which v1.0.0 turns on there).
 sed -i 's/\r$//' mediapipe-src/.bazelrc mediapipe-src/.bazelversion
+
+# 4. Pin the python the build resolves against. `default_python_version =
+#    "system"` means "whatever python3 the host happens to ship", and the four
+#    lock files stop at 3.12: on GitHub's ubuntu image the host python3 is 3.12
+#    (so it worked), on Debian 13 it is 3.13 and the build dies before it starts
+#    with `Error computing the main repository mapping: no such package
+#    '@@python_version_repo//': Could not find requirements_lock.txt file
+#    matching specified Python version`. The wheel is cp312 in every case —
+#    nothing here wants the host's version, so it stops being asked for it.
+apply mediapipe-src/WORKSPACE 'default_python_version = "system",' \
+  's/default_python_version = "system",/default_python_version = "3.12",/'
 
 echo "mediapipe source at $commit (version $version, patched)"

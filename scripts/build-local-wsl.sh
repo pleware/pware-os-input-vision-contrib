@@ -19,10 +19,23 @@ set -euo pipefail
 # mediapipe builds OpenCV from source, and its CMake probes for these headers.
 # The recipe turns the codecs we do not ship (webp, openexr, ffmpeg, gstreamer)
 # off, so the -dev packages for those are deliberately absent from this list.
+#
+# The JDK is not optional and not obvious: without one, `rules_java`'s toolchains
+# extension generates `local_jdk` whose BUILD references `@rules_java//tools/jdk`
+# -- a package the module does not have -- and the build dies before compiling
+# anything, in the middle of a target that has nothing to do with Java:
+#
+#   ERROR: no such package '@@rules_java~//tools/jdk': BUILD file not found ...
+#          referenced by '@@rules_java~~toolchains~local_jdk//:bootstrap_runtime_toolchain_definition'
+#
+# GitHub's ubuntu image ships a JDK, which is why CI never showed this. Pointing
+# bazel at a remote JDK (`--java_runtime_version=remotejdk_21`) does NOT help: the
+# generated repo is still analysed. Install one.
 apt-get -qq update
 apt-get -qq install -y \
   libjpeg-dev libpng-dev libtiff-dev \
-  libavcodec-dev libavformat-dev libavutil-dev libswscale-dev
+  libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
+  openjdk-21-jdk-headless
 
 # The pinned bazel, by hand, exactly as upstream's Dockerfile does it: a
 # resolver's opinion is not a pin (on a Windows runner the image's own bazel
@@ -39,28 +52,25 @@ bazel --version
 # not support it), so the wheel is the same cp312 as the box's environment.
 work="$(cd "$(dirname "$0")/.." && pwd)"
 python="$work/.venv-build/bin/python"
-uv venv "$work/.venv-build" --python 3.12
+# `--clear`: the script has to be re-runnable. A second run used to die on
+# "A virtual environment already exists at: .venv-build" — a build script that
+# cannot be run twice is a build script that lies about being idempotent.
+uv venv "$work/.venv-build" --python 3.12 --clear
 uv pip install --python "$python" -U setuptools wheel
 
 # Clone the pinned source, stamp the version, apply the anchor-asserting patches.
 bash "$work/scripts/checkout.sh"
 
-# Apple-only rules in `MODULE.bazel` (`rules_swift` beside `rules_apple` and
-# `apple_support`) abort the analysis of targets that never touch Swift, because
-# their autoconfiguration hard-fails where no `swiftc` exists:
+# No Swift stub here, and that is deliberate: on Linux `rules_swift`'s
+# autoconfiguration only warns when it finds no `swiftc` --
 #
-#   ERROR: Analysis of target '//mediapipe/tasks/metadata:image_segmenter_metadata_schema_py'
-#          failed; build aborted: No 'swiftc.exe' executable found in Path
+#   .../rules_swift~/swift/internal/swift_autoconfiguration.bzl:211:14:
+#   No 'swiftc' executable found in $PATH. Not auto-generating a Linux Swift toolchain.
 #
-# GitHub's ubuntu image happens to ship a Swift toolchain, which is the only
-# reason CI's Linux leg passed without this. A Debian box has none, and the
-# python wheel path never loads a Swift rule at all — so the module is pointed at
-# a stub. (A flag cannot be injected into setup.py's bazel invocation; the
-# workspace `.bazelrc` is where flags go.)
+# -- while on Windows the same check aborts the analysis outright. So the stub
+# belongs to the Windows leg (`_wheel.yml`), where it was needed, and not here
+# where the recipe then matches the Linux leg that actually produced a wheel.
 cd "$work/mediapipe-src"
-mkdir -p swift-stub
-printf 'module(name = "rules_swift", version = "2.3.0")\n' > swift-stub/MODULE.bazel
-printf 'common --override_module=rules_swift=%s/swift-stub\n' "$PWD" >> .bazelrc
 
 # mediapipe's own .bazelrc asks for `--jobs 1`; bound both jobs and memory
 # instead of letting bazel decide (the C++ side of OpenCV is memory-hungry).
