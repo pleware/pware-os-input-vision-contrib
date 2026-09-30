@@ -74,9 +74,11 @@ cd "$work/mediapipe-src"
 
 # mediapipe's own .bazelrc asks for `--jobs 1`; bound both jobs and memory
 # instead of letting bazel decide (the C++ side of OpenCV is memory-hungry).
+# `--local_resources=memory=` is the current spelling: `--local_ram_resources`
+# still works but prints a deprecation warning on every single invocation.
 {
   printf 'build --jobs=%s\n' "$(( $(nproc) / 2 > 12 ? 12 : $(nproc) / 2 ))"
-  printf 'build --local_ram_resources=%s\n' "$(( $(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo) * 3 / 4 ))"
+  printf 'build --local_resources=memory=%s\n' "$(( $(awk '/MemTotal/{print int($2/1024)}' /proc/meminfo) * 3 / 4 ))"
 } > ~/.bazelrc
 
 "$python" setup.py bdist_wheel

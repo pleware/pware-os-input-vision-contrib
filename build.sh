@@ -12,6 +12,19 @@ set -euo pipefail
 mise run setup-system
 
 ./scripts/checkout.sh
+
+# The Windows leg needs the Swift module stubbed before bazel looks at it: on
+# Windows `rules_swift`'s autoconfiguration aborts the analysis of targets that
+# never touch Swift (`No 'swiftc.exe' executable found in Path`), while on Linux
+# the same check is only a warning. `_wheel.yml` carries the CI twin of this step;
+# `scripts/build-local-wsl.sh` deliberately does not, because it does not need it.
+if [ "${OS:-}" = "Windows_NT" ]; then
+  mkdir -p mediapipe-src/swift-stub
+  printf 'module(name = "rules_swift", version = "2.3.0")\n' > mediapipe-src/swift-stub/MODULE.bazel
+  printf 'common --override_module=rules_swift=%s/swift-stub\n' \
+    "$(cygpath -m "$PWD/mediapipe-src")" >> mediapipe-src/.bazelrc
+fi
+
 cd mediapipe-src
 python -m pip install --upgrade setuptools wheel
 python setup.py bdist_wheel
