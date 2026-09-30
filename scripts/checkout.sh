@@ -35,7 +35,25 @@ version=$(pin_value version)
 [ -n "$commit" ] || { echo "no commit in mediapipe.pin" >&2; exit 1; }
 [ -n "$version" ] || { echo "no version in mediapipe.pin" >&2; exit 1; }
 
-rm -rf mediapipe-src
+# A bazel server keeps the checkout alive, and on Windows one open handle is
+# enough to make a recursive delete fail — and `bazel shutdown` returns before the
+# server has actually exited. Deleting the checkout is the first thing this script
+# does, so a failure here costs a whole build to discover (it surfaces as
+# `rm: cannot remove 'mediapipe-src': Device or resource busy`, one line into a log
+# nobody reads until the build is over). Hence: stop the server that owns the tree,
+# wait for the handle to go, and fail loudly if it never does. Skipped in CI, where
+# the directory does not exist yet.
+if [ -d mediapipe-src ]; then
+  (cd mediapipe-src && bazel shutdown >/dev/null 2>&1) || true
+  for _ in 1 2 3 4 5 6; do
+    if rm -rf mediapipe-src 2>/dev/null; then break; fi
+    sleep 5
+  done
+  [ ! -d mediapipe-src ] || {
+    echo "checkout: cannot remove mediapipe-src — a process still holds it" >&2
+    exit 1
+  }
+fi
 git clone --filter=blob:none --no-checkout \
   https://github.com/google-ai-edge/mediapipe mediapipe-src
 git -C mediapipe-src checkout "$commit"
