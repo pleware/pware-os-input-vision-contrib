@@ -1,0 +1,23 @@
+--- a/src/google/protobuf/io/BUILD.bazel
++++ b/src/google/protobuf/io/BUILD.bazel
+@@ -150,17 +150,17 @@
+     srcs = ["gzip_stream.cc"],
+     hdrs = ["gzip_stream.h"],
+     copts = COPTS + select({
+-        "//build_defs:config_msvc": [],
++        "//build_defs:config_msvc": ["-DHAVE_ZLIB"],
+         "//conditions:default": ["-DHAVE_ZLIB"],
+     }),
+     strip_include_prefix = "/src",
+     deps = [
+         ":io",
+         "//src/google/protobuf:port",
+         "//src/google/protobuf/stubs",
+         "@abseil-cpp//absl/log:absl_check",
+         "@abseil-cpp//absl/log:absl_log",
+     ] + select({
+-        "//build_defs:config_msvc": [],
++        "//build_defs:config_msvc": ["@zlib"],
+         "//conditions:default": ["@zlib"],
+     }),
+ )

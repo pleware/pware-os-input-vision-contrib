@@ -220,4 +220,24 @@ apply mediapipe-src/mediapipe/framework/api3/calculator_context.h \
   ', int&... DoNotSpecify,' \
   's/, int&\.\.\. DoNotSpecify,/,/g'
 
+# 10. protobuf's MSVC branch drops its zlib dependency — and -DHAVE_ZLIB — while
+#     io/gzip_stream.h includes <zlib.h> with no guard at all, so an MSVC build
+#     cannot compile protobuf's own io library:
+#
+#       gzip_stream.h(26): fatal error C1083: Cannot open include file: 'zlib.h':
+#       No such file or directory
+#
+#     The branch assumes whoever builds protobuf with MSVC brings zlib themselves.
+#     That is not true here: this build already has one (@zlib from WORKSPACE, zlib
+#     1.3.1 with mediapipe's own third_party/zlib.BUILD). The patch makes the two
+#     branches of each select agree — two lines, no restructuring — and travels as
+#     a file in this repository (`patches/`), applied through the module override
+#     mediapipe already declares for protobuf. `sed` cannot reach it: the file
+#     belongs to a fetched module, not to mediapipe's source tree.
+cp patches/protobuf_msvc_zlib.patch mediapipe-src/third_party/protobuf_msvc_zlib.patch
+apply mediapipe-src/third_party/BUILD '    "requirements_lock_3_12.txt",' \
+  's|    "requirements_lock_3_12.txt",|    "requirements_lock_3_12.txt",\n    "protobuf_msvc_zlib.patch",|'
+apply mediapipe-src/MODULE.bazel '    module_name = "protobuf",' \
+  's|    module_name = "protobuf",|    module_name = "protobuf",\n    patches = ["//third_party:protobuf_msvc_zlib.patch"],\n    patch_strip = 1,|'
+
 echo "mediapipe source at $commit (version $version, patched)"
