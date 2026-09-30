@@ -179,4 +179,19 @@ if ! grep -q '/std:c11' mediapipe-src/.bazelrc; then
   printf 'build:windows --conlyopt=/std:c11\n' >> mediapipe-src/.bazelrc
 fi
 
+# 8. Two classes named SubgraphContext in different namespaces: mediapipe's
+#    framework/subgraph.h has a plain one, api3/subgraph_context.h a template. graph.h
+#    declares the api3 template a friend without including its header, so unqualified
+#    lookup finds the outer plain class first and MSVC refuses the declaration:
+#
+#      mediapipe/framework/api3/graph.h(324): error C3857:
+#      "mediapipe::SubgraphContext": multiple template parameter lists are not allowed
+#
+#    GCC and clang read it as introducing the template in this scope and compile.
+#    A forward declaration of the template, in the namespace it belongs to, removes
+#    the ambiguity for every compiler.
+apply mediapipe-src/mediapipe/framework/api3/graph.h \
+  'namespace mediapipe::api3 {' \
+  's|namespace mediapipe::api3 {|namespace mediapipe::api3 {\n\n// Declared here to disambiguate the friend declaration below: the plain\n// mediapipe::SubgraphContext in framework/subgraph.h and this template share a\n// name, and without this line MSVC resolves the friend to the plain class.\ntemplate <typename NodeT>\nclass SubgraphContext;|'
+
 echo "mediapipe source at $commit (version $version, patched)"
