@@ -63,11 +63,15 @@ Google's PyPI wheel.
 
 ## Build locally
 
-The build toolchain (bazel 7.4.1, python 3.12) is provisioned by `ignite` from
-the pware-os workspace's `mise.toml` — the single source of truth for the pin.
-Platform system deps mise cannot pin live in the per-OS files auto-loaded by
-`auto_env` (`mise.windows.toml` → MSVC via winget, `mise.linux.toml` → OpenCV
-codecs via apt). After `ignite bootstrap` in `pware-os-workspace`:
+The build toolchain (bazel 7.4.1, python 3.12, **a JDK**) is provisioned by
+`ignite` from the pware-os workspace's `mise.toml` — the single source of truth
+for the pin. The JDK is not a convenience: without one, `rules_java`'s generated
+`local_jdk` aborts the analysis of a target that has nothing to do with Java
+(`no such package '@@rules_java~//tools/jdk'`), and pointing bazel at a remote JDK
+does not help. Platform system deps mise cannot pin live in the per-OS files
+auto-loaded by `auto_env` (`mise.windows.toml` → MSVC via winget,
+`mise.linux.toml` → OpenCV codecs via apt). After `ignite bootstrap` in
+`pware-os-workspace`: 
 
 ```sh
 ./build.sh   # setup-system, checkout, build, scan
