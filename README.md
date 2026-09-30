@@ -49,8 +49,9 @@ a source release we can name.
 4. `scripts/scan-wheel.py` scans the built wheel and **fails the run** when the
    uploader is present, writing `telemetry-scan.json` beside the artifact. A
    dirty wheel is never published.
-5. `release` attaches both wheels, their `SHA256SUMS` and the scan manifest to a
-   GitHub release.
+5. The `release` job attaches both wheels, their `SHA256SUMS` and the scan
+   manifest to a GitHub release — when CI can run. It is stopped on GitHub billing,
+   so v1.0.0's artifacts were attached from the local builds above.
 
 v1.0.0 is bzlmod-first (its own `.bazelrc` sets `common --enable_bzlmod`, and it
 ships `MODULE.bazel` *and* `WORKSPACE`), so the 0.10.35 recipe's
@@ -133,21 +134,29 @@ The umbrella carries the question (`drafts/99`, *how Python reaches the box*).
 
 ## Status
 
-The pin, the recipe, the gate and the release job are in place for v1.0.0.
+**Both wheels exist for v1.0.0, both built here, both verified on their own
+platform**, and both are attached to the `v1.0.0` release — that is the artifact to
+take, not a CI run, because GitHub Actions for this account is stopped on billing
+and no runner starts meanwhile.
 
-**Linux produces a wheel.** First from CI (two clean runs), and now on the box
-itself: `scripts/build-local-wsl.sh` builds it in ~10 minutes and the result was
-verified past the scan — installed into a fresh venv, `import mediapipe` → 1.0.0,
-and a real `FaceLandmarker` inference on the vision sensor's own
-`face_landmarker.task`.
+**Linux produces a wheel.** First from CI (two clean runs), and then on the box:
+`scripts/build-local-wsl.sh` builds it in ~10 minutes, and it was taken past the
+scan — installed into a fresh venv, `import mediapipe` → 1.0.0, and a real
+`FaceLandmarker` inference on the vision sensor's own `face_landmarker.task` (2 ms).
 
-**Windows is one step behind, and the steps are known.** The five dead runs of
-2026-09-12 and the first three of 2026-09-30 shared a cause: the runner image's
-own bazel (9.2.0, which has WORKSPACE off by default) answered `setup.py`'s bare
-`bazel` while the assert step a moment earlier saw 7.4.1 — so `@flatbuffers`,
-defined only in mediapipe's WORKSPACE, was invisible. With the pinned binary first
-on PATH the build reached mediapipe's own targets and stopped on the Apple-only
-`rules_swift`, which aborts analysis where no `swiftc` exists; that module is
-stubbed. The run meant to confirm it never started, on GitHub billing — so the
-Windows leg is unverified, and the local `./build.sh` (MSVC installed) is now the
-cheaper way to verify it than a runner.
+**Windows produces a wheel too** — `./build.sh` under `mise exec`: MSVC 14.44.35207
+and Windows SDK 10.0.26100 from VS 2022 Build Tools, bazel 7.4.1, python 3.12.10,
+JDK 21.0.2. Windows is the path upstream's own CI never walks, and it took thirteen
+patches before the build reached the end; every wall, and the line that now prevents
+it, is written in `scripts/checkout.sh` and listed in `RELEASE-v1.0.0.md`. Verified
+the same way as Linux, on Windows: fresh venv, `import mediapipe` → 1.0.0, a real
+`FaceLandmarker` inference (1 ms), with the wheel carrying its own
+`opencv_world3410.dll` so the target machine needs no OpenCV.
+
+The first three dead runs of 2026-09-30 had *two* causes, and the second hid behind
+the first: the runner image's own bazel (9.2.0, which has WORKSPACE off by default)
+answered `setup.py`'s bare `bazel` while the assert step a moment earlier saw
+7.4.1 — so `@flatbuffers`, defined only in mediapipe's WORKSPACE, was invisible.
+With the pinned binary first on PATH the build reached mediapipe's own targets and
+stopped on the Apple-only `rules_swift`, which aborts analysis where no `swiftc`
+exists; that module is stubbed.
