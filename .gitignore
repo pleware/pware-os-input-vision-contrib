@@ -14,3 +14,4 @@ graphify-out/
 
 # agentize-generated MCP config: per-instance, mount re-emits it.
 .cursor/mcp.json
+telemetry-scan.json
