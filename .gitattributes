@@ -1,6 +1,48 @@
-# Line endings: normalize to LF in the repository, native on checkout.
-* text=auto
+# pware-os line-ending policy — keep this block identical in every checkout.
 
+# Line endings, one rule: LF in the repository *and* in the working copy, on every
+# platform (the box, CI, Linux, the Windows laptops).
+#
+# `eol=lf` is the load-bearing half. With `text=auto` alone, `core.autocrlf=true`
+# (the Git-for-Windows default) hands out CRLF, and a file that happens to contain
+# a stray CR is classified *binary* by git — after which that path is never
+# normalised again, and an edit of ten lines arrives as a whole-file whitespace
+# diff. A declared eol removes both halves: nothing is converted on the way out, so
+# there is nothing to disagree about.
+#
+# The two failures this file exists to prevent, both measured on this box: a shell
+# script checked out with CRLF makes `#!/usr/bin/env bash` read as `bash` and the
+# kernel answers "bad interpreter", and `gofmt -l` calls every `.go` file
+# unformatted because of the CR it did not write.
+* text=auto eol=lf
+
+# The extensions this repo owns are named explicitly rather than left to `auto`: an
+# explicit `text` keeps normalising a file even after a stray CR gets into it.
+*.go text eol=lf
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.json text eol=lf
+*.jsonc text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.sh text eol=lf
+*.ps1 text eol=lf
+
+# What must keep the bytes it was written with: `cmd.exe` reads a `.bat` poorly
+# without CRLF, so those are the one exception, and a repo's own `-text` rules for
+# a verbatim pin or a binary stay below this block untouched.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# --- the repo's own rules, kept as they were ---
 # Except the pins. These are read by tools that compare them as strings —
 # bazelisk parses `.bazelversion` to decide which Bazel to download, a mediapipe
 # `.bazelrc` line is read by bazel before any of our code runs, and a stray CR
