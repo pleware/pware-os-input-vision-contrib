@@ -240,4 +240,19 @@ apply mediapipe-src/third_party/BUILD '    "requirements_lock_3_12.txt",' \
 apply mediapipe-src/MODULE.bazel '    module_name = "protobuf",' \
   's|    module_name = "protobuf",|    module_name = "protobuf",\n    patches = ["//third_party:protobuf_msvc_zlib.patch"],\n    patch_strip = 1,|'
 
+# 11. The out-of-class definitions of `Scoped<C>::current_` do not repeat the
+#     ABSL_CONST_INIT that the in-class declaration carries, and MSVC will not have a
+#     declaration and its definition disagree about it:
+#
+#       legacy_calculator_support.cc(21): error C2475: "current_": redefinition;
+#       inconsistent "constinit" specifier
+#
+#     ABSL_CONST_INIT expands to `constinit` under C++20. GCC and clang accept the
+#     mismatch; the specifier is supposed to be on the definition, which is where it
+#     now is (both specialisations, both `nullptr`).
+apply mediapipe-src/mediapipe/framework/legacy_calculator_support.cc \
+  'thread_local CalculatorContext*' \
+  -e 's|^thread_local CalculatorContext\*$|ABSL_CONST_INIT thread_local CalculatorContext*|' \
+  -e 's|^thread_local CalculatorContract\*$|ABSL_CONST_INIT thread_local CalculatorContract*|'
+
 echo "mediapipe source at $commit (version $version, patched)"
