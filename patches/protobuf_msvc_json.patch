@@ -1,0 +1,46 @@
+--- a/src/google/protobuf/json/BUILD.bazel
++++ b/src/google/protobuf/json/BUILD.bazel
+@@ -99,7 +99,10 @@
+ 
+ cc_library(
+     name = "untyped_message",
+-    srcs = ["internal/untyped_message.cc"],
++    srcs = select({
++        "//build_defs:config_msvc": [],
++        "//conditions:default": ["internal/untyped_message.cc"],
++    }),
+     hdrs = ["internal/untyped_message.h"],
+     copts = COPTS,
+     strip_include_prefix = "/src",
+@@ -209,9 +212,12 @@
+ 
+ cc_library(
+     name = "parser",
+-    srcs = [
+-        "internal/parser.cc",
+-    ],
++    srcs = select({
++        "//build_defs:config_msvc": [],
++        "//conditions:default": [
++            "internal/parser.cc",
++        ],
++    }),
+     hdrs = [
+         "internal/parser.h",
+         "internal/parser_traits.h",
+@@ -247,9 +253,12 @@
+ 
+ cc_library(
+     name = "unparser",
+-    srcs = [
+-        "internal/unparser.cc",
+-    ],
++    srcs = select({
++        "//build_defs:config_msvc": [],
++        "//conditions:default": [
++            "internal/unparser.cc",
++        ],
++    }),
+     hdrs = [
+         "internal/unparser.h",
+         "internal/unparser_traits.h",

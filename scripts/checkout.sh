@@ -171,21 +171,31 @@ fi
 #    nothing and needs no platform test here.
 if ! grep -q '/Zc:preprocessor' mediapipe-src/.bazelrc; then
   printf 'build:windows --copt=/Zc:preprocessor\n' >> mediapipe-src/.bazelrc
+  # The host (exec) configuration does not read --copt, and the same Apple-free
+  # headers are compiled for it (proto tools and code generators). Upstream's own
+  # .bazelrc sets both halves of every pair for exactly this reason.
+  printf 'build:windows --host_copt=/Zc:preprocessor\n' >> mediapipe-src/.bazelrc
 fi
 
 # 7. MSVC compiles C its own historical way unless told otherwise, and C11 atomics
-#    are not part of it. pthreadpool is a C library and uses them:
+#    are not only off by default, they are behind an experimental flag:
 #
-#      external/pthreadpool/BUILD.bazel: Compiling src/portable-api.c failed:
-#      vcruntime_c11_stdatomic.h(16): fatal error C1189:
-#      #error: "C atomics require C11 or later"
+#      external/pthreadpool/BUILD.bazel: Compiling src/memory.c failed:
+#      vcruntime_c11_stdatomic.h(12): fatal error C1189:
+#      #error: "C atomic support is not enabled"
 #
-#    `--conlyopt` is bazel's knob for C alone, which is what this needs: the C++
-#    side already has /std:c++20 from the same config, and handing `/std:c11` to a
-#    C++ compile is an error in itself. Nothing here sets a C standard for any
-#    platform -- GCC simply defaults to gnu11/gnu17, so only MSVC ever needed it.
-if ! grep -q '/std:c11' mediapipe-src/.bazelrc; then
+#    Measured on this compiler with a four-line C file: `/std:c11` alone still
+#    fails, `/experimental:c11atomics` alone still fails ("C atomics require C11 or
+#    later"), and the two together compile. pthreadpool is C and uses them.
+#    `--conlyopt` is bazel's knob for C alone: the C++ side already carries
+#    /std:c++20 from the same config, and /std:c11 handed to a C++ compile is an
+#    error in itself. Nothing sets a C standard for any platform -- GCC defaults to
+#    gnu11/gnu17 -- so only MSVC ever needed this, both halves of the toolchain.
+if ! grep -q '/experimental:c11atomics' mediapipe-src/.bazelrc; then
   printf 'build:windows --conlyopt=/std:c11\n' >> mediapipe-src/.bazelrc
+  printf 'build:windows --conlyopt=/experimental:c11atomics\n' >> mediapipe-src/.bazelrc
+  printf 'build:windows --host_conlyopt=/std:c11\n' >> mediapipe-src/.bazelrc
+  printf 'build:windows --host_conlyopt=/experimental:c11atomics\n' >> mediapipe-src/.bazelrc
 fi
 
 # 8. Two classes named SubgraphContext in different namespaces: mediapipe's
@@ -234,11 +244,10 @@ apply mediapipe-src/mediapipe/framework/api3/calculator_context.h \
 #     a file in this repository (`patches/`), applied through the module override
 #     mediapipe already declares for protobuf. `sed` cannot reach it: the file
 #     belongs to a fetched module, not to mediapipe's source tree.
-cp patches/protobuf_msvc_zlib.patch mediapipe-src/third_party/protobuf_msvc_zlib.patch
+cp patches/protobuf_msvc_zlib.patch patches/protobuf_msvc_json.patch \
+  mediapipe-src/third_party/
 apply mediapipe-src/third_party/BUILD '    "requirements_lock_3_12.txt",' \
-  's|    "requirements_lock_3_12.txt",|    "requirements_lock_3_12.txt",\n    "protobuf_msvc_zlib.patch",|'
-apply mediapipe-src/MODULE.bazel '    module_name = "protobuf",' \
-  's|    module_name = "protobuf",|    module_name = "protobuf",\n    patches = ["//third_party:protobuf_msvc_zlib.patch"],\n    patch_strip = 1,|'
+  's|    "requirements_lock_3_12.txt",|    "requirements_lock_3_12.txt",\n    "protobuf_msvc_zlib.patch",\n    "protobuf_msvc_json.patch",|'
 
 # 11. The out-of-class definitions of `Scoped<C>::current_` do not repeat the
 #     ABSL_CONST_INIT that the in-class declaration carries, and MSVC will not have a
@@ -254,5 +263,26 @@ apply mediapipe-src/mediapipe/framework/legacy_calculator_support.cc \
   'thread_local CalculatorContext*' \
   -e 's|^thread_local CalculatorContext\*$|ABSL_CONST_INIT thread_local CalculatorContext*|' \
   -e 's|^thread_local CalculatorContract\*$|ABSL_CONST_INIT thread_local CalculatorContract*|'
+
+# 12. protobuf's JSON parser holds an UntypedMessage inside a std::variant that is
+#     also an alternative of that variant, which only compiles where std::variant
+#     instantiates lazily. MSVC checks completeness when the variant is named:
+#
+#       MSVC/include/variant(933): error C2139: "google::protobuf::json_internal::
+#       UntypedMessage": an undefined type cannot be used as a compiler intrinsic
+#       type "__is_destructible"
+#       MSVC/include/variant(933): error C2338: static_assert failed:
+#       'variant<Types...> requires all of the Types to meet the Cpp17Destructible
+#       requirements'
+#
+#     There is no reordering or wrapper that fixes it: any complete wrapper would
+#     have to hold an UntypedMessage by value before the class is complete, which is
+#     the same circle. Nothing this wheel does reaches protobuf's JSON, so the three
+#     translation units are not built under MSVC -- `srcs` becomes empty through a
+#     select, and the linker is the arbiter: if anything in the graph really calls
+#     into them, the wheel fails to link with undefined symbols naming them, which
+#     is a loud answer rather than a silent one. Linux keeps compiling them.
+apply mediapipe-src/MODULE.bazel '    module_name = "protobuf",' \
+  's|    module_name = "protobuf",|    module_name = "protobuf",\n    patches = [\n        "//third_party:protobuf_msvc_zlib.patch",\n        "//third_party:protobuf_msvc_json.patch",\n    ],\n    patch_strip = 1,|'
 
 echo "mediapipe source at $commit (version $version, patched)"
