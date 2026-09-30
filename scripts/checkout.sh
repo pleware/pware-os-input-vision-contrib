@@ -54,7 +54,16 @@ version=$(pin_value version)
 # which the next build wants to keep), then delete with retries, and exit 1 naming
 # the cause if the directory survives.
 if [ -d mediapipe-src ]; then
-  (cd mediapipe-src && bazel shutdown >/dev/null 2>&1) || true
+  # `bazel shutdown` waits for a server that is busy to finish what it is doing,
+  # and a server left behind by an interrupted run can be busy for a long time -
+  # long enough that this script never gets to the delete, with no output and no
+  # error (measured: six minutes of nothing while a compiler worked on the tree it
+  # was about to lose). The wait is bounded; the retries below report the outcome.
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 60 bash -c 'cd mediapipe-src && bazel shutdown' >/dev/null 2>&1 || true
+  else
+    (cd mediapipe-src && bazel shutdown >/dev/null 2>&1) || true
+  fi
   for link in mediapipe-src/bazel-*; do
     [ -e "$link" ] || [ -L "$link" ] || continue
     cmd //c rmdir "$(cygpath -w "$link")" >/dev/null 2>&1 || true
