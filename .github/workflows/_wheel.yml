@@ -3,12 +3,18 @@ name: wheel
 # The wheel recipe, once, called by the two thin jobs in `build.yml`.
 #
 # Why a reusable workflow instead of a matrix: choosing a leg has to be a plain
-# `if:` on a job, and neither matrix trick works. A job-level `if:` is evaluated
-# before matrix expansion, so `matrix` is not a known name there (GitHub refuses
-# the dispatch outright). And an `include` entry that overwrites a key of the
-# matrix list is appended as a combination of its own, so `only=windows` ran both
-# legs — then, with `exclude` doing the filtering instead, both jobs died with no
-# log at all. One recipe, two callers, no expressions.
+# `if:` on a job, and the matrix cannot express it. A job-level `if:` is
+# evaluated before matrix expansion, so `matrix` is not a known name there
+# (GitHub refuses the dispatch outright). And an `include` entry that overwrites
+# a key of the matrix list is appended as a combination of its own, so
+# `only=windows` quietly ran both legs.
+#
+# (A correction worth keeping: two dispatches after that change failed with *no
+# steps and no log at all*, which looked like a rejected matrix expression. It was
+# not. The check-run annotation said "The job was not started because recent
+# account payments have failed or your spending limit needs to be increased" —
+# the workflow was never read. A job that fails before any step runs is a
+# billing/runner problem; read the annotations before rewriting YAML.)
 on:
   workflow_call:
     inputs:
