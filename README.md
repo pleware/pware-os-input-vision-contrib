@@ -20,6 +20,7 @@ Measured here, not read about. Google's wheels, `mediapipe/tasks/c/libmediapipe.
 | 0.10.35 | 62 | 1 | 3 | 1 |
 | 1.0.0 | 66 | 1 | 3 | 1 |
 | 1.0.1 | 66 | 1 | 3 | 1 |
+| **ours, built from source** | **0** | **0** | **0** | **0** |
 
 The upstream tree at the pinned commit names clearcut **nowhere** (5 4xx paths
 scanned, zero matches). A facial-sensor appliance that must not make any network
@@ -84,6 +85,33 @@ python setup.py bdist_wheel
 cd .. && python scripts/scan-wheel.py --dir mediapipe-src/dist
 ```
 
+### On this box, inside WSL — the faster local path
+
+`scripts/build-local-wsl.sh` needs nothing from Windows and uses the whole
+machine (16 cores, ext4) instead of a 4-core runner. Run it from a copy of this
+repository on the **Linux** filesystem: bazel makes tens of thousands of small
+file operations, and `/mnt/f` is a 9p bridge.
+
+```sh
+cp -r /mnt/f/<…>/pware-os-input-vision-contrib /root/build/contrib
+cd /root/build/contrib && bash scripts/build-local-wsl.sh 2>&1 | tee build.log
+```
+
+It installs everything the build turned out to need, each item because its
+absence failed a run — the codec headers OpenCV probes for, a **JDK** (without
+one, `rules_java`'s generated `local_jdk` aborts the analysis of a target that has
+nothing to do with Java), python 3.12 through `uv` (Debian 13 ships 3.13, which
+mediapipe's `setup.py` refuses), and the pinned bazel 7.4.1 as a plain binary.
+Measured on this box: **~10 minutes** with a warm bazel cache, the artifact
+`mediapipe-1.0.0-cp312-cp312-linux_x86_64.whl` (9.5 MB, scan clean), verified by
+installing it in a fresh venv and running a real `FaceLandmarker` inference on
+`pware-os-input-vision/vendor/mediapipe/face_landmarker.task`.
+
+The Windows half of that recipe is `./build.sh`, which needs MSVC — `mise run
+setup-system` installs it (`scripts/setup-msvc.ps1` in the umbrella, into
+`F:\Programy`) — and stubs the Apple-only `rules_swift` module, which aborts the
+analysis on Windows where on Linux it only warns.
+
 ## How the wheel reaches the box
 
 Open, and deliberately not answered here: publishing to a private repository
@@ -93,8 +121,21 @@ The umbrella carries the question (`drafts/99`, *how Python reaches the box*).
 
 ## Status
 
-The pin, the recipe, the gate and the release job are in place for v1.0.0. The
-0.10.35-era recipe never produced a wheel: five `workflow_dispatch` runs on
-2026-09-12, all failed, 39–55 minutes each. The first v1.0.0 run is the thing to
-watch next; the Windows leg is the one to expect trouble from, because it is the
-leg that builds MSVC + bazel + OpenCV from source on a 4-core runner.
+The pin, the recipe, the gate and the release job are in place for v1.0.0.
+
+**Linux produces a wheel.** First from CI (two clean runs), and now on the box
+itself: `scripts/build-local-wsl.sh` builds it in ~10 minutes and the result was
+verified past the scan — installed into a fresh venv, `import mediapipe` → 1.0.0,
+and a real `FaceLandmarker` inference on the vision sensor's own
+`face_landmarker.task`.
+
+**Windows is one step behind, and the steps are known.** The five dead runs of
+2026-09-12 and the first three of 2026-09-30 shared a cause: the runner image's
+own bazel (9.2.0, which has WORKSPACE off by default) answered `setup.py`'s bare
+`bazel` while the assert step a moment earlier saw 7.4.1 — so `@flatbuffers`,
+defined only in mediapipe's WORKSPACE, was invisible. With the pinned binary first
+on PATH the build reached mediapipe's own targets and stopped on the Apple-only
+`rules_swift`, which aborts analysis where no `swiftc` exists; that module is
+stubbed. The run meant to confirm it never started, on GitHub billing — so the
+Windows leg is unverified, and the local `./build.sh` (MSVC installed) is now the
+cheaper way to verify it than a runner.
