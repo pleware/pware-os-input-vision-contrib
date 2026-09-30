@@ -164,4 +164,19 @@ if ! grep -q '/Zc:preprocessor' mediapipe-src/.bazelrc; then
   printf 'build:windows --copt=/Zc:preprocessor\n' >> mediapipe-src/.bazelrc
 fi
 
+# 7. MSVC compiles C its own historical way unless told otherwise, and C11 atomics
+#    are not part of it. pthreadpool is a C library and uses them:
+#
+#      external/pthreadpool/BUILD.bazel: Compiling src/portable-api.c failed:
+#      vcruntime_c11_stdatomic.h(16): fatal error C1189:
+#      #error: "C atomics require C11 or later"
+#
+#    `--conlyopt` is bazel's knob for C alone, which is what this needs: the C++
+#    side already has /std:c++20 from the same config, and handing `/std:c11` to a
+#    C++ compile is an error in itself. Nothing here sets a C standard for any
+#    platform -- GCC simply defaults to gnu11/gnu17, so only MSVC ever needed it.
+if ! grep -q '/std:c11' mediapipe-src/.bazelrc; then
+  printf 'build:windows --conlyopt=/std:c11\n' >> mediapipe-src/.bazelrc
+fi
+
 echo "mediapipe source at $commit (version $version, patched)"
