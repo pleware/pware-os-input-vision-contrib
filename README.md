@@ -60,7 +60,12 @@ behind all five dead runs of September 2026 (`No repository visible as
 '@flatbuffers'`).
 
 The consuming repo (`pware-os-input-vision`) takes the wheel built here, never
-Google's PyPI wheel.
+Google's PyPI wheel: it depends on `mediapipe==1.0.0` and fetches one wheel per
+platform from this repository's `v1.0.0` release, with the hashes in its committed
+`uv.lock`. **This repository is public for that one reason** — a machine in a
+customer's building must be able to fetch the wheel without credentials, and
+pointing at a private git URL would need a token installed on it. Nothing here is
+secret; the source is Apache-2.0 and the recipe is the point.
 
 ## Build locally
 
