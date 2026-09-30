@@ -148,4 +148,20 @@ if ! grep -q 'protobuf_allow_msvc' mediapipe-src/.bazelrc; then
   printf 'build --define=protobuf_allow_msvc=true\n' >> mediapipe-src/.bazelrc
 fi
 
+# 6. MSVC's *traditional* preprocessor cannot expand mediapipe's variadic dispatch
+#    macros. `MP_ASSIGN_OR_RETURN(auto hwc, ...)` in ordinary code then fails like
+#    this, three errors deep, in a file that has nothing to do with macros:
+#
+#      tensors_to_segmentation_calculator.cc(175): error C2144: syntax error:
+#        "auto" should be preceded by ";"
+#      (204): error C2065: "MP_STATUS_MACROS_IMPL_REM": undeclared identifier
+#
+#    `/Zc:preprocessor` switches MSVC to the conforming one (VS2019 16.5+). It goes
+#    in the `windows` config, which the upstream .bazelrc already activates by
+#    itself through `--enable_platform_specific_config` — so it costs a Linux build
+#    nothing and needs no platform test here.
+if ! grep -q '/Zc:preprocessor' mediapipe-src/.bazelrc; then
+  printf 'build:windows --copt=/Zc:preprocessor\n' >> mediapipe-src/.bazelrc
+fi
+
 echo "mediapipe source at $commit (version $version, patched)"
