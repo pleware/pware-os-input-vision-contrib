@@ -298,5 +298,5 @@ apply mediapipe-src/MODULE.bazel '    module_name = "protobuf",' \
 #
 #     Nothing but the system provides the rest, so the wheel carries the one it
 #     needs, and refuses to build when that DLL is not where the link found it.
-git -C mediapipe-src apply "$PWD/patches/mediapipe_windows_wheel_name.patch"
+git -C mediapipe-src apply ../patches/mediapipe_windows_wheel_name.patch
 echo "mediapipe source at $commit (version $version, patched)"
